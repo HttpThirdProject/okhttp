@@ -45,6 +45,8 @@ internal abstract class DerAdapter<T>(
         (this.tag == -1L || tag == this.tag)
   }
 
+  abstract fun encode(writer: DerWriter, value: T)
+
   abstract fun decode(reader: DerReader, header: DerHeader): T
 
   private fun copy(
@@ -53,9 +55,10 @@ internal abstract class DerAdapter<T>(
     isOptional: Boolean = this.isOptional,
     defaultValue: T? = this.defaultValue
   ): DerAdapter<T> = object : DerAdapter<T>(tagClass, tag, isOptional, defaultValue) {
-    override fun decode(reader: DerReader, header: DerHeader): T {
-      return this@DerAdapter.decode(reader, header)
-    }
+    override fun encode(writer: DerWriter, value: T) = this@DerAdapter.encode(writer, value)
+
+    override fun decode(reader: DerReader, header: DerHeader): T =
+      this@DerAdapter.decode(reader, header)
   }
 
   /**
@@ -109,7 +112,9 @@ internal abstract class DerAdapter<T>(
     tagClass: Int = DerHeader.TAG_CLASS_CONTEXT_SPECIFIC,
     tag: Long
   ): DerAdapter<T> {
-    return Adapters.sequence(this) { list -> list[0] as T }
+    return Adapters.sequence(this,
+        decompose = { listOf(it) },
+        construct = { it[0] as T })
         .withTag(tagClass, tag)
   }
 
@@ -123,6 +128,12 @@ internal abstract class DerAdapter<T>(
         tagClass = tagClass,
         tag = tag
     ) {
+      override fun encode(writer: DerWriter, value: List<T>) {
+        for (v in value) {
+          writer.write(member, v)
+        }
+      }
+
       override fun decode(reader: DerReader, header: DerHeader): List<T> {
         val result = mutableListOf<T>()
 
